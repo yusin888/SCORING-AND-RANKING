@@ -1,0 +1,330 @@
+{
+  "examples": {
+    "1_create_job": {
+      "method": "POST",
+      "url": "/api/jobs",
+      "description": "Create a job with relevant criteria",
+      "data": {
+        "title": "Senior Software Engineer",
+        "description": "We are looking for an experienced software engineer with strong backend skills and system design expertise.",
+        "department": "Engineering",
+        "location": "Remote",
+        "criteria": [
+          {
+            "name": "yearsOfExperience",
+            "weight": 0.2,
+            "description": "Years of software engineering experience"
+          },
+          {
+            "name": "programmingSkills",
+            "weight": 0.3,
+            "description": "Programming proficiency (0-1 scale)"
+          },
+          {
+            "name": "systemDesign",
+            "weight": 0.25,
+            "description": "System design capabilities (0-1 scale)"
+          },
+          {
+            "name": "education",
+            "weight": 0.15,
+            "description": "Educational qualifications (0-1 scale)"
+          },
+          {
+            "name": "communication",
+            "weight": 0.1,
+            "description": "Communication skills (0-1 scale)"
+          }
+        ],
+        "usesMultipleHR": true
+      }
+    },
+    
+    "2_refine_weights": {
+      "method": "PUT",
+      "url": "/api/jobs/:jobId/refine-weights",
+      "description": "Refine job weights using Delphi technique",
+      "data": {
+        "hrWeights": [
+          {
+            "yearsOfExperience": 0.25,
+            "programmingSkills": 0.35,
+            "systemDesign": 0.2,
+            "education": 0.1,
+            "communication": 0.1
+          },
+          {
+            "yearsOfExperience": 0.2,
+            "programmingSkills": 0.3,
+            "systemDesign": 0.3,
+            "education": 0.1,
+            "communication": 0.1
+          },
+          {
+            "yearsOfExperience": 0.15,
+            "programmingSkills": 0.35,
+            "systemDesign": 0.25,
+            "education": 0.15,
+            "communication": 0.1
+          }
+        ]
+      }
+    },
+    
+    "3_submit_candidates": [
+      {
+        "method": "POST",
+        "url": "/api/candidates",
+        "description": "Submit candidate 1",
+        "data": {
+          "firstName": "John",
+          "lastName": "Doe",
+          "email": "john.doe@example.com",
+          "phone": "123-456-7890",
+          "jobId": ":jobId",
+          "attributes": {
+            "yearsOfExperience": 8,
+            "programmingSkills": 0.9,
+            "systemDesign": 0.8,
+            "education": 0.85,
+            "communication": 0.7
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "url": "/api/candidates",
+        "description": "Submit candidate 2",
+        "data": {
+          "firstName": "Jane",
+          "lastName": "Smith",
+          "email": "jane.smith@example.com",
+          "phone": "234-567-8901",
+          "jobId": ":jobId",
+          "attributes": {
+            "yearsOfExperience": 5,
+            "programmingSkills": 0.85,
+            "systemDesign": 0.75,
+            "education": 0.9,
+            "communication": 0.8
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "url": "/api/candidates",
+        "description": "Submit candidate 3",
+        "data": {
+          "firstName": "Michael",
+          "lastName": "Johnson",
+          "email": "michael.johnson@example.com",
+          "phone": "345-678-9012",
+          "jobId": ":jobId",
+          "attributes": {
+            "yearsOfExperience": 10,
+            "programmingSkills": 0.7,
+            "systemDesign": 0.9,
+            "education": 0.75,
+            "communication": 0.65
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "url": "/api/candidates",
+        "description": "Submit candidate 4",
+        "data": {
+          "firstName": "Emily",
+          "lastName": "Williams",
+          "email": "emily.williams@example.com",
+          "phone": "456-789-0123",
+          "jobId": ":jobId",
+          "attributes": {
+            "yearsOfExperience": 3,
+            "programmingSkills": 0.8,
+            "systemDesign": 0.6,
+            "education": 0.95,
+            "communication": 0.9
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "url": "/api/candidates",
+        "description": "Submit candidate 5",
+        "data": {
+          "firstName": "David",
+          "lastName": "Brown",
+          "email": "david.brown@example.com",
+          "phone": "567-890-1234",
+          "jobId": ":jobId",
+          "attributes": {
+            "yearsOfExperience": 6,
+            "programmingSkills": 0.75,
+            "systemDesign": 0.85,
+            "education": 0.8,
+            "communication": 0.75
+          }
+        }
+      }
+    ],
+    
+    "4_initial_scoring": {
+      "method": "POST",
+      "url": "/api/scores/initial/:jobId",
+      "description": "Calculate initial scores using fuzzy logic",
+      "data": {
+        "targetValues": {
+          "yearsOfExperience": 7,
+          "programmingSkills": 0.8,
+          "systemDesign": 0.8,
+          "education": 0.8,
+          "communication": 0.8
+        },
+        "fuzzyFactor": 0.3
+      }
+    },
+    
+    "5_shortlist_candidates": {
+      "method": "POST",
+      "url": "/api/scores/shortlist/:jobId",
+      "description": "Shortlist candidates based on initial scores",
+      "data": {
+        "threshold": 0.75,
+        "maxCandidates": 3,
+        "criteriaThresholds": {
+          "yearsOfExperience": 5
+        }
+      }
+    },
+    
+    "6_get_shortlisted": {
+      "method": "GET",
+      "url": "/api/scores/shortlisted/:jobId",
+      "description": "Get all shortlisted candidates"
+    },
+    
+    "7_schedule_interviews": [
+      {
+        "method": "POST",
+        "url": "/api/interviews",
+        "description": "Schedule interview for shortlisted candidate 1",
+        "data": {
+          "candidateId": ":candidate1Id",
+          "jobId": ":jobId",
+          "scheduledDate": "2023-07-15T10:00:00.000Z"
+        }
+      },
+      {
+        "method": "POST",
+        "url": "/api/interviews",
+        "description": "Schedule interview for shortlisted candidate 2",
+        "data": {
+          "candidateId": ":candidate2Id",
+          "jobId": ":jobId",
+          "scheduledDate": "2023-07-16T10:00:00.000Z"
+        }
+      },
+      {
+        "method": "POST",
+        "url": "/api/interviews",
+        "description": "Schedule interview for shortlisted candidate 3",
+        "data": {
+          "candidateId": ":candidate3Id",
+          "jobId": ":jobId",
+          "scheduledDate": "2023-07-17T10:00:00.000Z"
+        }
+      }
+    ],
+    
+    "8_complete_interviews": [
+      {
+        "method": "PUT",
+        "url": "/api/interviews/:interviewId/stage1",
+        "description": "Complete phone screen for candidate 1",
+        "data": {
+          "completed": true,
+          "communicationScore": 0.85,
+          "date": "2023-07-15T10:00:00.000Z",
+          "interviewer": "HR Manager",
+          "notes": "Great communication skills, enthusiastic about the role."
+        }
+      },
+      {
+        "method": "PUT",
+        "url": "/api/interviews/:interviewId/stage2",
+        "description": "Complete coding interview for candidate 1",
+        "data": {
+          "completed": true,
+          "problemSolvingScore": 0.9,
+          "date": "2023-07-20T14:00:00.000Z",
+          "interviewer": "Tech Lead",
+          "notes": "Excellent problem-solving skills, completed all challenges."
+        }
+      },
+      {
+        "method": "PUT",
+        "url": "/api/interviews/:interviewId/stage3",
+        "description": "Complete onsite interview for candidate 1",
+        "data": {
+          "completed": true,
+          "systemDesignScore": 0.8,
+          "date": "2023-07-25T11:00:00.000Z",
+          "interviewer": "CTO",
+          "notes": "Good system design knowledge, could improve on scalability aspects."
+        }
+      }
+    ],
+    
+    "9_calculate_stage_scores": [
+      {
+        "method": "POST",
+        "url": "/api/scores/stage/:candidateId",
+        "description": "Calculate phone screen score",
+        "data": {
+          "stage": "phoneScreen",
+          "stageWeight": 0.3
+        }
+      },
+      {
+        "method": "POST",
+        "url": "/api/scores/stage/:candidateId",
+        "description": "Calculate coding interview score",
+        "data": {
+          "stage": "codingInterview",
+          "stageWeight": 0.4
+        }
+      },
+      {
+        "method": "POST",
+        "url": "/api/scores/stage/:candidateId",
+        "description": "Calculate onsite interview score",
+        "data": {
+          "stage": "onsiteInterview",
+          "stageWeight": 0.3
+        }
+      }
+    ],
+    
+    "10_final_ranking": {
+      "method": "POST",
+      "url": "/api/scores/final/:jobId",
+      "description": "Calculate final scores and rank candidates",
+      "data": {
+        "stageWeights": {
+          "phoneScreen": 0.2,
+          "codingInterview": 0.5,
+          "onsiteInterview": 0.3
+        }
+      }
+    },
+    
+    "11_get_final_ranking": {
+      "method": "GET",
+      "url": "/api/scores/ranking/:jobId",
+      "description": "Get final ranked candidates list"
+    }
+  },
+  
+  "flow_description": "This data shows the complete two-phase ranking process flow:\n1. Create a job with criteria\n2. Refine weights using multiple HR inputs\n3. Submit multiple candidates\n4. Calculate initial scores with fuzzy logic (pre-interview screening)\n5. Shortlist top candidates based on initial scores\n6. Retrieve the shortlisted candidates\n7. Schedule interviews for shortlisted candidates only\n8. Complete all interview stages for each candidate\n9. Calculate individual stage scores\n10. Calculate final scores and rank candidates\n11. Retrieve final ranking"
+} 
