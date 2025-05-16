@@ -74,9 +74,94 @@ app.get('/api', (req, res) => {
         cancelInterview: 'PUT /api/interviews/:id/cancel'
       },
       scores: {
+        calculateInitialScores: 'POST /api/scores/initial/:jobId',
+        shortlistCandidates: 'POST /api/scores/shortlist/:jobId',
+        getShortlistedCandidates: 'GET /api/scores/shortlisted/:jobId',
         calculateStageScore: 'POST /api/scores/stage/:id',
         calculateFinalScores: 'POST /api/scores/final/:jobId',
         getRanking: 'GET /api/scores/ranking/:jobId'
+      }
+    },
+    requestBodies: {
+      jobs: {
+        createJob: {
+          title: "String (required)",
+          description: "String (required)",
+          department: "String (required)",
+          location: "String (required)",
+          criteria: "Array of objects with name and weight properties (required)",
+          usesMultipleHR: "Boolean (optional)"
+        },
+        refineWeights: {
+          hrWeights: "Array of weight objects from multiple HR professionals"
+        },
+        finalizeWeights: {
+          weights: "Object with criteria names as keys and weight values (0-1)"
+        }
+      },
+      candidates: {
+        createCandidate: {
+          firstName: "String (required)",
+          lastName: "String (required)",
+          email: "String (required)",
+          phone: "String (optional)",
+          jobId: "String (required)",
+          attributes: "Object (optional)",
+          resume: "File upload (optional)"
+        },
+        thresholdFilter: {
+          thresholds: "Object with criteria thresholds"
+        },
+        extractAttributes: {
+          attributes: "Object with attribute key-value pairs",
+          membershipType: "String: 'simple', 'triangular', 'trapezoidal', 'gaussian' (optional)",
+          fuzzyFactor: "Number between 0-1 (optional)"
+        },
+        rankCandidates: {
+          stageWeights: "Object with weights for each interview stage",
+          rankingMethod: "String: 'wsm' or 'owa' (optional)",
+          owaWeights: "Array of weight values (optional)",
+          strategy: "String: 'optimistic', 'balanced', 'pessimistic' (optional)"
+        }
+      },
+      interviews: {
+        scheduleInterview: {
+          candidateId: "String (required)",
+          jobId: "String (required)",
+          scheduledDate: "ISO8601 Date (required)",
+          stages: "Object (optional)"
+        },
+        updateStages: {
+          completed: "Boolean (required)",
+          notes: "String (optional)",
+          date: "Date (optional)",
+          interviewer: "String (optional)"
+        }
+      },
+      scores: {
+        calculateInitialScores: {
+          targetValues: "Object with ideal values for attributes",
+          fuzzyFactor: "Number between 0-1 (optional)",
+          membershipType: "String (optional)",
+          confidenceWeights: "Object (optional)"
+        },
+        shortlistCandidates: {
+          threshold: "Number between 0-1 (required)",
+          maxCandidates: "Number (optional)",
+          criteriaThresholds: "Object (optional)",
+          alphaCutThreshold: "Number between 0-1 (optional)",
+          thresholdFuzzyFactor: "Number between 0-0.5 (optional)"
+        },
+        calculateStageScore: {
+          stage: "String: phoneScreen, codingInterview, or onsiteInterview"
+        },
+        calculateFinalScores: {
+          stageWeights: "Object with weights for each interview stage",
+          aggregationMethod: "String: 'wsm' or 'owa' (optional)",
+          strategyProfile: "String: 'optimistic', 'balanced', 'pessimistic', 'custom' (optional)",
+          owaWeights: "Array of weight values (optional)",
+          alphaCutThreshold: "Number between 0-1 (optional)"
+        }
       }
     }
   });
