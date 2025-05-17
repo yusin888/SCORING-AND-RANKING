@@ -10,19 +10,12 @@ const Candidate = require('../models/Candidate');
 const Job = require('../models/Job');
 const { applyHardCriteriaFilter, calculateFuzzyScore, aggregateStageScores, rankCandidates, applyOWA, applyWSM } = require('../utils/scoring');
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../public/uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  }
-});
+// NOTE: For production environments, it's recommended to use a cloud storage service
+// like AWS S3, Google Cloud Storage, or Vercel Blob Storage for file uploads.
+// This in-memory approach is used as a workaround for Vercel's read-only filesystem.
+
+// Configure multer for in-memory storage instead of disk storage
+const storage = multer.memoryStorage(); // Use memory storage instead of disk storage
 
 const upload = multer({
   storage,
@@ -89,7 +82,10 @@ router.post(
         email,
         phone,
         jobId,
-        attributes
+        attributes,
+        calculateScore = true, // Default to calculating score
+        fuzzyFactor = 0.2,
+        membershipType = 'simple'
       } = req.body;
 
       // Check if job exists
@@ -98,7 +94,8 @@ router.post(
         return res.status(404).json({ message: 'Job not found' });
       }
 
-      const resumeUrl = req.file ? `/uploads/${req.file.filename}` : '';
+      // Create a virtual filename for reference (not saving to disk)
+      const resumeUrl = req.file ? `/uploads/${Date.now()}-${req.file.originalname}` : '';
 
       // Parse attributes if it's a string
       let parsedAttributes = attributes;
@@ -899,12 +896,18 @@ router.post(
         return res.status(404).json({ message: 'Job not found' });
       }
 
-      const resumeUrl = `/uploads/${req.file.filename}`;
-      const resumeFilePath = path.join(__dirname, '../../public', resumeUrl);
-
+      // Create a virtual filename for reference (not saving to disk)
+      const resumeFilename = `${Date.now()}-${req.file.originalname}`;
+      const resumeUrl = `/uploads/${resumeFilename}`;
+      
       // Create form data for the resume parser API
       const formData = new FormData();
-      formData.append('resume', fs.createReadStream(resumeFilePath));
+      
+      // Add the file buffer directly to the form data with a filename
+      formData.append('resume', req.file.buffer, {
+        filename: req.file.originalname,
+        contentType: req.file.mimetype
+      });
 
       // Call the external resume parser API
       const parserResponse = await axios.post(
@@ -1175,7 +1178,7 @@ router.post(
         lastName,
         email,
         phone,
-        resumeUrl,
+        resumeUrl, // Store the virtual URL (note: the actual file isn't saved)
         jobId,
         attributes,
         ...(initialScore !== null && { initialScore }),
@@ -1192,7 +1195,7 @@ router.post(
         email: candidate.email,
         phone: candidate.phone,
         jobId: candidate.jobId,
-        resumeUrl: candidate.resumeUrl,
+        resumeUrl: candidate.resumeUrl, // This is a reference URL, not an actual file location
         attributes: Object.fromEntries(candidate.attributes),
         parsedResume: resumeData,
         status: candidate.status
