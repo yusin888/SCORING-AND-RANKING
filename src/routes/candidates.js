@@ -86,10 +86,13 @@ router.get('/', async (req, res) => {
         status: candidate.status,
         displayStatus: displayStatus,
         initialScore: candidate.initialScore,
+        confidenceScore: candidate.confidenceScore,
         finalScore: candidate.finalScore,
         score: candidate.finalScore || candidate.initialScore || 0,
         stages: candidate.stages,
-        statusCounts
+        statusCounts,
+        parsedResume: candidate.parsedResume,
+        experienceDetails: candidate.parsedResume ? candidate.parsedResume['Experience Details'] : []
       };
     });
     
@@ -128,9 +131,13 @@ router.get('/:id', async (req, res) => {
         final: 0
       },
       appliedOn: candidate.createdAt,
+      initialScore: candidate.initialScore,
+      confidenceScore: candidate.confidenceScore,
       resume: candidate.resumeUrl,
       attributes: Object.fromEntries(candidate.attributes || new Map()),
       stages: candidate.stages,
+      parsedResume: candidate.parsedResume,
+      experienceDetails: candidate.parsedResume ? candidate.parsedResume['Experience Details'] : []
     };
     
     // Add education score if available
@@ -939,8 +946,8 @@ router.post(
         jobId,
         attributes,
         parsedResume: resumeData,
-        ...(initialScore !== null && { initialScore }),
-        ...(confidenceScore !== null && { confidenceScore }),
+        initialScore: initialScore,
+        confidenceScore: confidenceScore,
         status: 'applied'
       });
       
@@ -1295,12 +1302,12 @@ router.post(
         lastName,
         email,
         phone,
-        resumeUrl, // Store the virtual URL (note: the actual file isn't saved)
+        resumeUrl,
         jobId,
         attributes,
         parsedResume: resumeData,
-        ...(initialScore !== null && { initialScore }),
-        ...(confidenceScore !== null && { confidenceScore }),
+        initialScore: initialScore,
+        confidenceScore: confidenceScore,
         status: 'applied'
       });
       
@@ -1458,8 +1465,8 @@ router.post('/update-with-parsed', async (req, res) => {
         jobId,
         attributes: attributes ? new Map(Object.entries(attributes)) : new Map(),
         parsedResume,
-        ...(initialScore !== undefined && { initialScore }),
-        ...(confidenceScore !== undefined && { confidenceScore }),
+        initialScore: initialScore,
+        confidenceScore: confidenceScore,
         status: status || 'applied'
       });
       
