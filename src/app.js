@@ -58,6 +58,7 @@ app.get('/api', (req, res) => {
         getCandidate: 'GET /api/candidates/:id',
         createCandidate: 'POST /api/candidates',
         fromParsedResume: 'POST /api/candidates/from-parsed-resume',
+        uploadParseScore: 'POST /api/candidates/upload-parse-score',
         thresholdFilter: 'POST /api/candidates/job/:jobId/threshold-filter',
         extractAttributes: 'POST /api/candidates/:id/extract-attributes',
         updateStage: 'PUT /api/candidates/:id/stage/:stage',
@@ -115,6 +116,12 @@ app.get('/api', (req, res) => {
           resumeData: "Object containing parsed resume information (required)",
           fuzzyFactor: "Number between 0-1 (optional, default: 0.2)",
           membershipType: "String: 'simple', 'triangular', 'trapezoidal', 'gaussian' (optional, default: 'simple')"
+        },
+        uploadParseScore: {
+          jobId: "String (required)",
+          resume: "File upload (required) - PDF, DOC, or DOCX resume file",
+          fuzzyFactor: "Number between 0-1 (optional, default: 0.2)",
+          membershipType: "String: 'triangular' (default), 'simple', 'trapezoidal', 'gaussian' (optional)"
         },
         thresholdFilter: {
           thresholds: "Object with criteria thresholds"
