@@ -95,6 +95,7 @@ This system implements a complete backend API for candidate evaluation:
 - `GET /api/candidates` - Get all candidates
 - `GET /api/candidates/:id` - Get a specific candidate
 - `POST /api/candidates` - Add a new candidate
+- `POST /api/candidates/from-parsed-resume` - Add a candidate from parsed resume data with auto-scoring
 - `POST /api/candidates/job/:jobId/threshold-filter` - Apply threshold filtering
 - `POST /api/candidates/:id/extract-attributes` - Extract candidate attributes
 - `PUT /api/candidates/:id/stage/:stage` - Update candidate stage info

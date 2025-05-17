@@ -57,6 +57,7 @@ app.get('/api', (req, res) => {
         getAllCandidates: 'GET /api/candidates',
         getCandidate: 'GET /api/candidates/:id',
         createCandidate: 'POST /api/candidates',
+        fromParsedResume: 'POST /api/candidates/from-parsed-resume',
         thresholdFilter: 'POST /api/candidates/job/:jobId/threshold-filter',
         extractAttributes: 'POST /api/candidates/:id/extract-attributes',
         updateStage: 'PUT /api/candidates/:id/stage/:stage',
@@ -108,6 +109,12 @@ app.get('/api', (req, res) => {
           jobId: "String (required)",
           attributes: "Object (optional)",
           resume: "File upload (optional)"
+        },
+        fromParsedResume: {
+          jobId: "String (required)",
+          resumeData: "Object containing parsed resume information (required)",
+          fuzzyFactor: "Number between 0-1 (optional, default: 0.2)",
+          membershipType: "String: 'simple', 'triangular', 'trapezoidal', 'gaussian' (optional, default: 'simple')"
         },
         thresholdFilter: {
           thresholds: "Object with criteria thresholds"
@@ -162,6 +169,40 @@ app.get('/api', (req, res) => {
           owaWeights: "Array of weight values (optional)",
           alphaCutThreshold: "Number between 0-1 (optional)"
         }
+      }
+    },
+    exampleRequests: {
+      fromParsedResume: {
+        jobId: "60d5ec9af682fbd8c0b4b1a3",
+        resumeData: {
+          "Name": "John Doe",
+          "Email": "john.doe@example.com",
+          "Phone": "123-456-7890",
+          "Skills": [
+            "JavaScript", "Python", "React", "Node.js", "AWS"
+          ],
+          "Education Details": [
+            {
+              "date completed": "May 2023",
+              "education level": "Bachelor of Science",
+              "field of study": "Computer Science",
+              "institution": "University of Technology"
+            }
+          ],
+          "Experience Details": [
+            {
+              "Industry Name": "Tech Solutions Inc",
+              "Roles": "Software Engineer"
+            },
+            {
+              "Industry Name": "DevCorp",
+              "Roles": "Full-stack Developer"
+            }
+          ],
+          "Total Estimated Years of Experience": "2.5"
+        },
+        fuzzyFactor: 0.2,
+        membershipType: "triangular"
       }
     }
   });

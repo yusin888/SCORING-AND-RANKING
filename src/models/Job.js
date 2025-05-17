@@ -15,6 +15,10 @@ const criterionSchema = new mongoose.Schema({
   description: {
     type: String,
     trim: true
+  },
+  targetValue: {
+    type: mongoose.Schema.Types.Mixed,
+    description: 'The ideal value for this criterion used for candidate scoring'
   }
 });
 

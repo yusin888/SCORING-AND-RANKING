@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const Candidate = require('../models/Candidate');
 const Job = require('../models/Job');
-const { applyHardCriteriaFilter, calculateFuzzyScore, aggregateStageScores, rankCandidates, applyOWA } = require('../utils/scoring');
+const { applyHardCriteriaFilter, calculateFuzzyScore, aggregateStageScores, rankCandidates, applyOWA, applyWSM } = require('../utils/scoring');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -542,5 +542,326 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+// Add a candidate from parsed resume data with automatic scoring
+router.post(
+  '/from-parsed-resume',
+  [
+    body('jobId').notEmpty().withMessage('Job ID is required'),
+    body('resumeData').isObject().withMessage('Resume data object is required'),
+    body('fuzzyFactor').optional().isFloat({ min: 0, max: 1 }).withMessage('Fuzzy factor must be between 0 and 1'),
+    body('membershipType').optional().isIn(['simple', 'triangular', 'trapezoidal', 'gaussian']).withMessage('Invalid membership function type')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const {
+        jobId,
+        resumeData,
+        fuzzyFactor = 0.2,
+        membershipType = 'simple'
+      } = req.body;
+
+      // Check if job exists
+      const job = await Job.findById(jobId);
+      if (!job) {
+        return res.status(404).json({ message: 'Job not found' });
+      }
+      
+      // Extract basic info from parsed resume data
+      const firstName = resumeData.Name ? resumeData.Name.split(' ')[0] : '';
+      const lastName = resumeData.Name ? resumeData.Name.split(' ').slice(1).join(' ') : '';
+      const email = resumeData.Email || '';
+      const phone = resumeData.Phone || '';
+      
+      // Map skills and experience to attributes
+      const attributes = new Map();
+      
+      // Helper function to sanitize keys for MongoDB
+      const sanitizeKey = (key) => key.toLowerCase().replace(/\./g, '_').replace(/\s+/g, '_');
+      
+      // Add skills
+      if (Array.isArray(resumeData.Skills)) {
+        resumeData.Skills.forEach(skill => {
+          attributes.set(sanitizeKey(skill), true);
+        });
+      }
+      
+      // Add years of experience
+      if (resumeData['Total Estimated Years of Experience']) {
+        attributes.set('yearsOfExperience', parseFloat(resumeData['Total Estimated Years of Experience']) || 0);
+      }
+      
+      // Add experience details
+      if (Array.isArray(resumeData['Experience Details'])) {
+        // Process experience roles (developer, engineer, etc.)
+        const roleTypes = {
+          developer: 0,
+          engineer: 0,
+          intern: 0,
+          designer: 0,
+          fullstack: 0
+        };
+        
+        resumeData['Experience Details'].forEach(exp => {
+          const role = exp.Roles ? exp.Roles.toLowerCase() : '';
+          
+          if (role.includes('developer') || role.includes('dev')) {
+            roleTypes.developer += 1;
+            if (role.includes('full') || role.includes('fullstack') || role.includes('full-stack')) {
+              roleTypes.fullstack += 1;
+            }
+          }
+          
+          if (role.includes('engineer')) roleTypes.engineer += 1;
+          if (role.includes('intern')) roleTypes.intern += 1;
+          if (role.includes('design')) roleTypes.designer += 1;
+        });
+        
+        // Add role counts as attributes
+        Object.entries(roleTypes).forEach(([role, count]) => {
+          if (count > 0) {
+            attributes.set(`${role}_experience`, count);
+          }
+        });
+      }
+      
+      // Add education level
+      if (Array.isArray(resumeData['Education Details']) && resumeData['Education Details'].length > 0) {
+        const education = resumeData['Education Details'][0];
+        
+        if (education['education level']) {
+          const level = education['education level'].toLowerCase();
+          attributes.set('education_level', level);
+          
+          // Categorize education level
+          if (level.includes('bachelor')) {
+            attributes.set('has_bachelors', true);
+          } else if (level.includes('master')) {
+            attributes.set('has_masters', true);
+          } else if (level.includes('phd') || level.includes('doctor')) {
+            attributes.set('has_phd', true);
+          }
+        }
+        
+        if (education['field of study']) {
+          const field = education['field of study'].toLowerCase();
+          attributes.set('field_of_study', field);
+          
+          // Flag for CS-related degrees
+          if (field.includes('computer') || field.includes('software') || field.includes('it')) {
+            attributes.set('has_cs_degree', true);
+          }
+        }
+      }
+      
+      // Count technical skills by category
+      if (Array.isArray(resumeData.Skills)) {
+        // Define skill categories
+        const categories = {
+          'programming_languages': ['java', 'python', 'javascript', 'typescript', 'c++', 'c#', 'go', 'ruby', 'php', 'swift', 'kotlin'],
+          'web_frameworks': ['react', 'angular', 'vue', 'next', 'django', 'flask', 'express', 'spring', 'laravel'],
+          'databases': ['sql', 'mysql', 'postgresql', 'mongodb', 'dynamodb', 'oracle', 'cassandra', 'redis'],
+          'cloud_services': ['aws', 'azure', 'gcp', 'google cloud', 'firebase', 'heroku', 'vercel']
+        };
+        
+        // Count skills in each category
+        Object.entries(categories).forEach(([category, keywords]) => {
+          const count = resumeData.Skills.filter(skill => 
+            keywords.some(keyword => sanitizeKey(skill).includes(sanitizeKey(keyword)))
+          ).length;
+          
+          if (count > 0) {
+            attributes.set(`${category}_count`, count);
+          }
+        });
+      }
+      
+      // Calculate initial score if job has weights defined
+      let initialScore = null;
+      let confidenceScore = null;
+      
+      if (job.finalWeights && (job.finalWeights.size > 0 || Object.keys(job.finalWeights || {}).length > 0)) {
+        // Get weights in the right format
+        const weights = job.finalWeights instanceof Map ? 
+          Object.fromEntries(job.finalWeights.entries()) : job.finalWeights;
+        
+        const scoredAttributes = {};
+        const attributeConfidences = {};
+        
+        // Debug: Log the available criteria
+        console.log('Job criteria:', job.criteria.map(c => ({ name: c.name, targetValue: c.targetValue, weight: c.weight })));
+        console.log('Candidate attributes:', Object.fromEntries(attributes.entries()));
+        
+        // First, try direct matching between attributes and criteria
+        for (const [key, value] of attributes.entries()) {
+          // Get target value from job criteria if available
+          const criterion = job.criteria.find(c => 
+            sanitizeKey(c.name) === key || // Exact match
+            key.includes(sanitizeKey(c.name)) || // Attribute contains criterion name
+            sanitizeKey(c.name).includes(key) // Criterion name contains attribute
+          );
+          
+          if (criterion && criterion.targetValue !== undefined) {
+            // Calculate fuzzy score using specified membership function
+            const fuzzyScore = calculateFuzzyScore(
+              value,
+              criterion.targetValue,
+              fuzzyFactor,
+              membershipType
+            );
+            
+            // Store for WSM calculation
+            scoredAttributes[criterion.name] = fuzzyScore;
+            attributeConfidences[criterion.name] = 1.0; // Default confidence
+            
+            // Add fuzzy score to attributes
+            attributes.set(`${key}_fuzzyScore`, fuzzyScore);
+            attributes.set(`${key}_membershipFunction`, membershipType);
+            
+            console.log(`Matched attribute ${key} to criterion ${criterion.name} with score ${fuzzyScore}`);
+          }
+        }
+        
+        // Special handling for common criteria types that need attribute mapping
+        const criteriaMap = {
+          // Education level criteria
+          'education': (attrs) => {
+            if (attrs.has('has_phd')) return attrs.get('has_phd') ? 1.0 : 0;
+            if (attrs.has('has_masters')) return attrs.get('has_masters') ? 0.8 : 0;
+            if (attrs.has('has_bachelors')) return attrs.get('has_bachelors') ? 0.6 : 0;
+            return 0;
+          },
+          'degree': (attrs) => {
+            return attrs.has('has_cs_degree') ? 1.0 : 0;
+          },
+          'experience': (attrs) => {
+            return attrs.get('yearsOfExperience') || 0;
+          },
+          'programming': (attrs) => {
+            return attrs.get('programming_languages_count') || 0;
+          },
+          'languages': (attrs) => {
+            return attrs.get('programming_languages_count') || 0;
+          },
+          'frameworks': (attrs) => {
+            return attrs.get('web_frameworks_count') || 0;
+          },
+          'database': (attrs) => {
+            return attrs.get('databases_count') || 0;
+          },
+          'cloud': (attrs) => {
+            return attrs.get('cloud_services_count') || 0;
+          }
+        };
+        
+        // Apply special mapping for unmatched criteria
+        for (const criterion of job.criteria) {
+          // Skip already matched criteria
+          if (scoredAttributes[criterion.name]) continue;
+          
+          // Find any map function that applies to this criterion
+          for (const [keyword, mapFunc] of Object.entries(criteriaMap)) {
+            if (sanitizeKey(criterion.name).includes(keyword)) {
+              const rawValue = mapFunc(attributes);
+              let fuzzyScore;
+              
+              // If the criterion has a target value, use fuzzy matching
+              if (criterion.targetValue !== undefined) {
+                fuzzyScore = calculateFuzzyScore(
+                  rawValue,
+                  criterion.targetValue,
+                  fuzzyFactor,
+                  membershipType
+                );
+              } else {
+                // Otherwise, normalize the value based on common ranges
+                if (keyword === 'experience') {
+                  // Scale years of experience (0-10 years typical range)
+                  fuzzyScore = Math.min(rawValue / 10, 1);
+                } else if (keyword === 'programming' || keyword === 'languages' || 
+                           keyword === 'frameworks' || keyword === 'database' || keyword === 'cloud') {
+                  // Scale counts (0-10 skills typical range)
+                  fuzzyScore = Math.min(rawValue / 5, 1);
+                } else {
+                  fuzzyScore = rawValue;
+                }
+              }
+              
+              // Store for WSM calculation
+              scoredAttributes[criterion.name] = fuzzyScore;
+              attributeConfidences[criterion.name] = 0.8; // Lower confidence for mapped attributes
+              
+              console.log(`Mapped criterion ${criterion.name} using ${keyword} function with score ${fuzzyScore}`);
+              break;
+            }
+          }
+        }
+        
+        console.log('Final scored attributes:', scoredAttributes);
+        console.log('Weights:', weights);
+        
+        // If we have attributes to score and weights
+        if (Object.keys(scoredAttributes).length > 0 && Object.keys(weights).length > 0) {
+          // Apply weighted sum model to calculate initial score
+          const scoreResult = applyWSM(scoredAttributes, weights, attributeConfidences);
+          initialScore = scoreResult.score;
+          confidenceScore = scoreResult.confidence;
+          
+          console.log('Calculated score:', initialScore, 'with confidence:', confidenceScore);
+        } else {
+          // Fallback scoring if no criteria matched
+          initialScore = 0.5; // Neutral score
+          confidenceScore = 0.5; // Low confidence
+          console.log('No matching criteria found, using fallback score');
+        }
+      }
+      
+      // Create new candidate with parsed data and initial score
+      const newCandidate = new Candidate({
+        firstName,
+        lastName,
+        email,
+        phone,
+        jobId,
+        attributes,
+        ...(initialScore !== null && { initialScore }),
+        ...(confidenceScore !== null && { confidenceScore }),
+        status: 'applied'
+      });
+      
+      const candidate = await newCandidate.save();
+      
+      // Format response
+      const response = {
+        id: candidate._id,
+        name: `${candidate.firstName} ${candidate.lastName}`,
+        email: candidate.email,
+        phone: candidate.phone,
+        jobId: candidate.jobId,
+        attributes: Object.fromEntries(candidate.attributes),
+        status: candidate.status
+      };
+      
+      // Add score info if calculated
+      if (initialScore !== null) {
+        response.initialScore = initialScore;
+        response.confidenceScore = confidenceScore;
+      }
+      
+      res.status(201).json(response);
+    } catch (error) {
+      console.error('Error processing parsed resume:', error);
+      res.status(500).json({ 
+        message: 'Server error during candidate creation',
+        error: error.message
+      });
+    }
+  }
+);
 
 module.exports = router; 
