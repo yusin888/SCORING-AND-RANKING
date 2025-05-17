@@ -132,4 +132,32 @@ This backend-only implementation is designed to be consumed by any frontend or c
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Seeding Sample Data
+
+To populate the database with sample candidates that match the UI mockups:
+
+1. Ensure your MongoDB connection string is set in your `.env` file
+2. Run the seed script:
+
+```bash
+npm run seed
+```
+
+This will create a sample job and 10 candidates with varying scores, skills, and interview stages that match the UI design.
+
+## Testing Endpoints
+
+After seeding the database, you can test the updated candidate endpoints:
+
+```bash
+npm run test-endpoints
+```
+
+This will:
+1. Fetch all candidates from the database
+2. Display a list of candidates with their names and scores
+3. Fetch and display detailed information for the first candidate
+
+Make sure your API server is running before executing the test script. 

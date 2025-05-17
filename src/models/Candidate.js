@@ -35,12 +35,21 @@ const candidateSchema = new mongoose.Schema({
     type: Map,
     of: mongoose.Schema.Types.Mixed
   },
+  parsedResume: {
+    type: mongoose.Schema.Types.Mixed
+  },
   passedThreshold: {
     type: Boolean,
     default: true
   },
   // Initial score before interviews (based on fuzzy scoring)
   initialScore: {
+    type: Number,
+    min: 0,
+    max: 1
+  },
+  // Initial score confidence
+  confidenceScore: {
     type: Number,
     min: 0,
     max: 1

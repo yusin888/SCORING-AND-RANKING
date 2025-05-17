@@ -34,11 +34,66 @@ const upload = multer({
 // Get all candidates
 router.get('/', async (req, res) => {
   try {
-    const { jobId } = req.query;
-    const query = jobId ? { jobId } : {};
+    const { jobId, status } = req.query;
+    let query = {};
     
-    const candidates = await Candidate.find(query).sort({ finalScore: -1 });
-    res.json(candidates);
+    // Filter by job if jobId is provided
+    if (jobId) {
+      query.jobId = jobId;
+    }
+    
+    // Filter by status if provided
+    if (status) {
+      query.status = status;
+    }
+    
+    const candidates = await Candidate.find(query)
+      .populate('jobId', 'title') // Get job title
+      .sort({ finalScore: -1 });
+    
+    // Format candidates for frontend display
+    const formattedCandidates = candidates.map(candidate => {
+      // Calculate the status counts for tabs
+      const statusCounts = {
+        all: candidates.length,
+        active: candidates.filter(c => c.status !== 'hired' && c.status !== 'rejected').length,
+        hired: candidates.filter(c => c.status === 'hired').length,
+        rejected: candidates.filter(c => c.status === 'rejected').length
+      };
+      
+      // Format stages for display
+      let displayStatus = candidate.status;
+      if (candidate.finalScore && candidate.status === 'interviewing') {
+        displayStatus = 'Final Ranking';
+      } else if (candidate.stages.phoneScreen.completed && !candidate.stages.codingInterview.completed) {
+        displayStatus = 'Initial Filtering';
+      } else if (candidate.stages.codingInterview.completed && !candidate.stages.onsiteInterview.completed) {
+        displayStatus = 'Detailed Scoring';
+      } else if (candidate.stages.onsiteInterview.completed) {
+        displayStatus = 'Soft Skills Evaluation';
+      }
+      
+      return {
+        id: candidate._id,
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        name: `${candidate.firstName} ${candidate.lastName}`,
+        email: candidate.email,
+        phone: candidate.phone,
+        applied: candidate.createdAt,
+        role: candidate.jobId ? candidate.jobId.title : '',
+        experience: candidate.attributes.get('yearsOfExperience') || 0,
+        status: candidate.status,
+        displayStatus: displayStatus,
+        initialScore: candidate.initialScore,
+        finalScore: candidate.finalScore,
+        score: candidate.finalScore || candidate.initialScore || 0,
+        stages: candidate.stages,
+        statusCounts
+      };
+    });
+    
+    res.json(formattedCandidates);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -48,11 +103,66 @@ router.get('/', async (req, res) => {
 // Get a specific candidate
 router.get('/:id', async (req, res) => {
   try {
-    const candidate = await Candidate.findById(req.params.id);
+    const candidate = await Candidate.findById(req.params.id)
+      .populate('jobId', 'title criteria');
+    
     if (!candidate) {
       return res.status(404).json({ message: 'Candidate not found' });
     }
-    res.json(candidate);
+    
+    // Format detailed candidate data for frontend display
+    const formattedCandidate = {
+      id: candidate._id,
+      firstName: candidate.firstName,
+      lastName: candidate.lastName,
+      name: `${candidate.firstName} ${candidate.lastName}`,
+      email: candidate.email,
+      phone: candidate.phone,
+      role: candidate.jobId ? candidate.jobId.title : '',
+      experience: candidate.attributes.get('yearsOfExperience') || 0,
+      status: candidate.status,
+      finalRanking: candidate.finalScore ? true : false,
+      scores: {
+        education: 0,
+        technical: 0,
+        final: 0
+      },
+      appliedOn: candidate.createdAt,
+      resume: candidate.resumeUrl,
+      attributes: Object.fromEntries(candidate.attributes || new Map()),
+      stages: candidate.stages,
+    };
+    
+    // Add education score if available
+    if (candidate.attributes.has('education')) {
+      formattedCandidate.scores.education = candidate.attributes.get('education') * 100;
+    }
+    
+    // Calculate technical score from coding interview if available
+    if (candidate.stages.codingInterview.score) {
+      formattedCandidate.scores.technical = candidate.stages.codingInterview.score * 100;
+    }
+    
+    // Add final score if available
+    if (candidate.finalScore) {
+      formattedCandidate.scores.final = candidate.finalScore * 100;
+    }
+    
+    // Extract key skills from attributes
+    formattedCandidate.keySkills = [];
+    if (candidate.attributes) {
+      const skillKeys = ['javascript', 'react', 'nodejs', 'typescript', 'mongodb'];
+      skillKeys.forEach(skill => {
+        if (candidate.attributes.has(skill) || 
+            (candidate.attributes.has('skills') && 
+             Array.isArray(candidate.attributes.get('skills')) && 
+             candidate.attributes.get('skills').includes(skill))) {
+          formattedCandidate.keySkills.push(skill);
+        }
+      });
+    }
+    
+    res.json(formattedCandidate);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -828,6 +938,7 @@ router.post(
         phone,
         jobId,
         attributes,
+        parsedResume: resumeData,
         ...(initialScore !== null && { initialScore }),
         ...(confidenceScore !== null && { confidenceScore }),
         status: 'applied'
@@ -842,7 +953,9 @@ router.post(
         email: candidate.email,
         phone: candidate.phone,
         jobId: candidate.jobId,
+        resumeUrl: candidate.resumeUrl, // This is a reference URL, not an actual file location
         attributes: Object.fromEntries(candidate.attributes),
+        parsedResume: resumeData,
         status: candidate.status
       };
       
@@ -850,6 +963,10 @@ router.post(
       if (initialScore !== null) {
         response.initialScore = initialScore;
         response.confidenceScore = confidenceScore;
+        response.scoringSettings = {
+          fuzzyFactor,
+          membershipType
+        };
       }
       
       res.status(201).json(response);
@@ -1181,6 +1298,7 @@ router.post(
         resumeUrl, // Store the virtual URL (note: the actual file isn't saved)
         jobId,
         attributes,
+        parsedResume: resumeData,
         ...(initialScore !== null && { initialScore }),
         ...(confidenceScore !== null && { confidenceScore }),
         status: 'applied'
@@ -1221,5 +1339,144 @@ router.post(
     }
   }
 );
+
+// Update a candidate with parsed resume data
+router.post('/:id/parsed-resume', [
+  body('parsedResume').isObject().withMessage('Parsed resume data must be an object')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { id } = req.params;
+    const { parsedResume } = req.body;
+    
+    const candidate = await Candidate.findById(id);
+    if (!candidate) {
+      return res.status(404).json({ message: 'Candidate not found' });
+    }
+    
+    // Update candidate with parsed resume data
+    candidate.parsedResume = parsedResume;
+    await candidate.save();
+    
+    res.json({
+      message: 'Candidate parsed resume data updated',
+      candidateId: id
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update or create a candidate with the full data including parsed resume
+router.post('/update-with-parsed', async (req, res) => {
+  try {
+    const {
+      id,
+      name,
+      email,
+      phone,
+      jobId,
+      resumeUrl,
+      attributes,
+      parsedResume,
+      status,
+      initialScore,
+      confidenceScore,
+      scoringSettings
+    } = req.body;
+    
+    // Extract first and last name
+    const nameParts = name ? name.split(' ') : ['', ''];
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ');
+    
+    let candidate;
+    
+    // Check if candidate already exists
+    if (id) {
+      candidate = await Candidate.findById(id);
+    }
+    
+    if (!candidate && email) {
+      candidate = await Candidate.findOne({ email });
+    }
+    
+    if (candidate) {
+      // Update existing candidate
+      if (name) {
+        candidate.firstName = firstName;
+        candidate.lastName = lastName;
+      }
+      if (phone) candidate.phone = phone;
+      if (resumeUrl) candidate.resumeUrl = resumeUrl;
+      if (jobId) candidate.jobId = jobId;
+      if (parsedResume) candidate.parsedResume = parsedResume;
+      if (status) candidate.status = status;
+      if (initialScore !== undefined) candidate.initialScore = initialScore;
+      if (confidenceScore !== undefined) candidate.confidenceScore = confidenceScore;
+      
+      // Update attributes if provided
+      if (attributes && typeof attributes === 'object') {
+        // Convert attributes object to Map
+        const attributesMap = new Map(Object.entries(attributes));
+        candidate.attributes = attributesMap;
+      }
+      
+      await candidate.save();
+      
+      res.json({ 
+        message: 'Candidate updated successfully',
+        candidateId: candidate._id
+      });
+    } else {
+      // Create new candidate
+      if (!jobId) {
+        return res.status(400).json({ message: 'Job ID is required to create a new candidate' });
+      }
+      
+      if (!email) {
+        return res.status(400).json({ message: 'Email is required to create a new candidate' });
+      }
+      
+      // Check if job exists
+      const job = await Job.findById(jobId);
+      if (!job) {
+        return res.status(404).json({ message: 'Job not found' });
+      }
+      
+      const newCandidate = new Candidate({
+        firstName,
+        lastName,
+        email,
+        phone,
+        resumeUrl,
+        jobId,
+        attributes: attributes ? new Map(Object.entries(attributes)) : new Map(),
+        parsedResume,
+        ...(initialScore !== undefined && { initialScore }),
+        ...(confidenceScore !== undefined && { confidenceScore }),
+        status: status || 'applied'
+      });
+      
+      candidate = await newCandidate.save();
+      
+      res.status(201).json({ 
+        message: 'Candidate created successfully',
+        candidateId: candidate._id
+      });
+    }
+  } catch (error) {
+    console.error('Error updating candidate with parsed data:', error);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
 
 module.exports = router; 
