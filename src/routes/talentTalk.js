@@ -15,6 +15,7 @@ router.post('/chat', [
 
   try {
     const { user_input } = req.body;
+    console.log(user_input);
     
     // Connect to the MongoDB database directly to fetch the latest FastAPI URL
     const db = mongoose.connection.db;
