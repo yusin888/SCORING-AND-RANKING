@@ -9,6 +9,7 @@ const FormData = require('form-data');
 const Candidate = require('../models/Candidate');
 const Job = require('../models/Job');
 const { applyHardCriteriaFilter, calculateFuzzyScore, aggregateStageScores, rankCandidates, applyOWA, applyWSM } = require('../utils/scoring');
+const mongoose = require('mongoose');
 
 // NOTE: For production environments, it's recommended to use a cloud storage service
 // like AWS S3, Google Cloud Storage, or Vercel Blob Storage for file uploads.

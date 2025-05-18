@@ -11,6 +11,7 @@ const jobRoutes = require('./routes/jobs');
 const candidateRoutes = require('./routes/candidates');
 const scoreRoutes = require('./routes/scores');
 const interviewRoutes = require('./routes/interviews');
+const talentTalkRoutes = require('./routes/talentTalk');
 
 // Initialize Express app
 const app = express();
@@ -31,6 +32,7 @@ app.use('/api/jobs', jobRoutes);
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/scores', scoreRoutes);
 app.use('/api/interviews', interviewRoutes);
+app.use('/api/talent-talk', talentTalkRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -82,6 +84,10 @@ app.get('/api', (req, res) => {
         calculateStageScore: 'POST /api/scores/stage/:id',
         calculateFinalScores: 'POST /api/scores/final/:jobId',
         getRanking: 'GET /api/scores/ranking/:jobId'
+      },
+      talentTalk: {
+        chatWithTalentTalk: 'POST /api/talent-talk/chat',
+        getTalentTalkStatus: 'GET /api/talent-talk/status'
       }
     },
     requestBodies: {
@@ -175,6 +181,11 @@ app.get('/api', (req, res) => {
           strategyProfile: "String: 'optimistic', 'balanced', 'pessimistic', 'custom' (optional)",
           owaWeights: "Array of weight values (optional)",
           alphaCutThreshold: "Number between 0-1 (optional)"
+        }
+      },
+      talentTalk: {
+        chat: {
+          user_input: "String (required) - The query or message to send to TalentTalk"
         }
       }
     },
